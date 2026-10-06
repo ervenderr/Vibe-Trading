@@ -310,6 +310,8 @@ class DataConfig(_EnvBase):
     market_data_order_macro: str = Field(alias="MARKET_DATA_ORDER_MACRO", default="")
     market_data_order_forex: str = Field(alias="MARKET_DATA_ORDER_FOREX", default="")
     market_data_order_index: str = Field(alias="MARKET_DATA_ORDER_INDEX", default="")
+    typesafe_api_key: str = Field(alias="TYPESAFE_API_KEY", default="")
+    typesafe_model: str = Field(alias="TYPESAFE_MODEL", default="jev-1.13.0")
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
     "h2>=4.4.1",
+    "typesafe-sdk>=0.7.2,<1",
     "defusedxml>=0.7.1",
     "oauth-cli-kit>=0.1.3",
     "pandas>=2.0.0,<3.0.0",
@@ -164,6 +165,10 @@ upbit = [
     # with a named error naming this extra; upbit_jwt_available() stays False
     # until installed.
     "PyJWT>=2.8.0",
+]
+alpaca = [
+    # Alpaca trading/data SDK for the paper-trading execution bridge (src/execution).
+    "alpaca-py>=0.40",
 ]
 deepseek = [
     "langchain-deepseek>=1.0.0,<2",

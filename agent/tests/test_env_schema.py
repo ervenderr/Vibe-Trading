@@ -155,6 +155,19 @@ class TestEnvConfigDefaults:
             field = f"market_data_order_{market}"
             assert hasattr(c.data, field), f"{field} missing from EnvConfig.data"
             assert getattr(c.data, field) == ""
+        assert c.data.typesafe_api_key == ""
+        assert c.data.typesafe_model == "jev-1.13.0"
+
+    def test_typesafe_settings_read_from_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TYPESAFE_API_KEY", "ts-key")
+        monkeypatch.setenv("TYPESAFE_MODEL", "jev-latest")
+
+        data = EnvConfig().data
+
+        assert data.typesafe_api_key == "ts-key"
+        assert data.typesafe_model == "jev-latest"
 
     def test_api_defaults(self) -> None:
         c = EnvConfig()
