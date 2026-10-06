@@ -5545,6 +5545,38 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     channels_pairing.add_argument("pairing_args", nargs="*", help="Pairing command arguments")
 
+    signal_parser = subparsers.add_parser(
+        "signal", help="News + price BUY/SELL/WAIT/AVOID signal (advisory, places no orders)"
+    )
+    signal_parser.add_argument("symbols", nargs="*", help="Tickers, e.g. NVDA TSLA BTC-USD")
+    signal_parser.add_argument("--watch", type=float, metavar="SECONDS", help="Re-check every N seconds (min 30)")
+    signal_parser.add_argument("--history", action="store_true", help="Grade past signals (track record)")
+    signal_parser.add_argument("--json", action="store_true", help="Emit JSON")
+
+    execute_parser = subparsers.add_parser(
+        "execute", help="Plan (dry run) or place a PAPER bracket order from a signal; never touches live accounts"
+    )
+    execute_parser.add_argument("symbols", nargs="+", help="Tickers, e.g. NVDA TSLA")
+    execute_parser.add_argument("--execute", action="store_true", help="Actually place the order in the PAPER account")
+
+    autopilot_parser = subparsers.add_parser(
+        "autopilot", help="Run signals on a schedule against the PAPER account (dry run unless --execute)"
+    )
+    autopilot_parser.add_argument("symbols", nargs="*", help="Tickers, e.g. NVDA TSLA AAPL")
+    autopilot_parser.add_argument("--execute", action="store_true", help="Place PAPER orders (default is a dry run)")
+    autopilot_parser.add_argument("--interval", type=float, default=120.0, help="Seconds between cycles (min 30)")
+    autopilot_parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
+    autopilot_parser.add_argument("--report", action="store_true", help="Show the paper track record and promotion checks")
+    autopilot_parser.add_argument("--since", type=lambda v: datetime.strptime(v, "%Y-%m-%d").date(), help="Report start date YYYY-MM-DD")
+
+    token_parser = subparsers.add_parser(
+        "token", help="Rug-pull / scam warning-sign check for a DEX token (cannot predict rugs)"
+    )
+    token_parser.add_argument("chain", help="solana, ethereum, bsc, base, arbitrum, polygon, optimism, avalanche")
+    token_parser.add_argument("address", help="Token contract / mint address")
+    token_parser.add_argument("--description", help="Promo text to check for scam-style language (uses Jev)")
+    token_parser.add_argument("--json", action="store_true", help="Emit JSON")
+
     list_parser = subparsers.add_parser("list", help="List runs")
     list_parser.add_argument("--limit", dest="list_limit", type=_positive_int, default=20, help="Maximum number of runs")
 
@@ -6695,6 +6727,25 @@ def main(argv: list[str] | None = None) -> int:
             json_mode=args.run_json,
             no_rich=args.run_no_rich,
         )
+    if args.command == "autopilot":
+        from src.execution.autopilot_cli import run_autopilot_command
+
+        return run_autopilot_command(args)
+    if args.command == "execute":
+        from src.execution.cli import run_execute_command
+
+        return run_execute_command(args)
+    if args.command == "token":
+        from src.signals.token_service import run_token_command
+
+        return run_token_command(args)
+    if args.command == "signal":
+        from src.signals.cli import run_signal_command
+
+        if not args.history and not args.symbols:
+            print("usage: vibe-trading signal SYMBOL [SYMBOL ...] [--watch SECONDS] [--json] | --history")
+            return 2
+        return run_signal_command(args)
     if args.command == "list":
         return _coerce_exit_code(cmd_list(args.list_limit))
     if args.command == "show":
