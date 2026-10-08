@@ -37,8 +37,9 @@ class VerdictConfig:
     disagree_min: float = 0.2  # both sides at least this strong to count as conflict
     max_item_score: float = 0.7  # one item can never saturate the news score
     min_trend_confirmation: float = 0.15  # news alone may not open a trade
-    stop_atr: float = 1.0
-    target_atr: float = 1.5
+    stop_atr: float = 2.0  # one 5-minute ATR is inside normal noise; 2 gives a trade room to work
+    target_atr: float = 3.0
+    min_stop_pct: float = 0.003  # floor for calm symbols (e.g. gold ETFs): stop is never closer than 0.3% of price
     valid_minutes: float = 15.0
 
 
@@ -159,6 +160,7 @@ def _entry(
 ) -> Verdict:
     side = 1.0 if combined > 0 else -1.0
     entry = tech.close
+    stop_distance = max(cfg.stop_atr * tech.atr, cfg.min_stop_pct * entry)
     reasons = [
         f"news {n:+.2f}" if has_news else "no fresh news (price only)",
         f"trend {t:+.2f} (RSI {tech.rsi:.0f}, vol x{tech.vol_ratio:.1f})",
@@ -171,6 +173,6 @@ def _entry(
         news_score=n,
         tech_score=t,
         entry=entry,
-        stop=entry - side * cfg.stop_atr * tech.atr,
-        target=entry + side * cfg.target_atr * tech.atr,
+        stop=entry - side * stop_distance,
+        target=entry + side * stop_distance * cfg.target_atr / cfg.stop_atr,
     )

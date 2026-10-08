@@ -126,3 +126,22 @@ class TestOverboughtConflict:
     def test_bullish_news_against_oversold_downtrend_waits_not_buys(self) -> None:
         v = decide(aggregate_news([_news(0.9)], NOW), _tech(ema_fast=99.0, rsi=0.0), now=NOW)
         assert v.action is Action.WAIT
+
+
+class TestStopWidth:
+    """A stop inside one 5-minute noise band got GLD stopped out in a minute: widen it, with a price floor."""
+
+    def _buy(self, **kw: float):
+        v = decide(aggregate_news([_news(0.8)], NOW), _tech(ema_fast=102.0, **kw), now=NOW)
+        assert v.action == Action.BUY
+        return v
+
+    def test_stop_is_two_atr_and_target_three_atr(self) -> None:
+        v = self._buy(close=100.0, atr=1.0)
+        assert round(v.entry - v.stop, 4) == 2.0
+        assert round(v.target - v.entry, 4) == 3.0
+
+    def test_calm_symbol_gets_a_price_floor_on_the_stop(self) -> None:
+        v = self._buy(close=383.0, atr=0.27)  # 2 ATR = 0.54 (0.14%), below the 0.3% floor
+        assert round(v.entry - v.stop, 3) == round(383.0 * 0.003, 3)
+        assert round((v.target - v.entry) / (v.entry - v.stop), 3) == 1.5  # reward:risk preserved
