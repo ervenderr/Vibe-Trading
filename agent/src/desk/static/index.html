@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Desk</title>
+<link rel="stylesheet" href="desk.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="stamp" title="Simulated money. This page cannot place orders.">Paper money</span>
+    <h1>Paper Desk</h1>
+  </div>
+  <div class="clock" id="clock" aria-live="polite"></div>
+  <div class="pilot" id="pilot"></div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main class="board">
+  <section class="rack" aria-labelledby="rack-h">
+    <div class="sec-head">
+      <h2 id="rack-h">What the signals say right now</h2>
+      <form id="add" class="add" autocomplete="off">
+        <label class="sr" for="sym">Add a symbol</label>
+        <input id="sym" maxlength="10" placeholder="Add symbol, e.g. MSFT" spellcheck="false">
+        <button type="submit">Add</button>
+        <button type="button" id="refresh">Refresh signals</button>
+      </form>
+    </div>
+    <p class="hint">Signals are information only. News never opens a trade by itself; price has to agree. Backtests found no proven edge.</p>
+    <div id="strips" class="strips"></div>
+  </section>
+
+  <aside class="side">
+    <section aria-labelledby="acct-h">
+      <h2 id="acct-h">Account</h2>
+      <div id="account" class="account"></div>
+    </section>
+    <section aria-labelledby="pos-h">
+      <h2 id="pos-h">Open positions and orders</h2>
+      <div id="positions"></div>
+    </section>
+    <section aria-labelledby="gate-h">
+      <h2 id="gate-h">Is it ready for real money?</h2>
+      <div id="gate"></div>
+    </section>
+  </aside>
+
+  <section class="wide trace" aria-labelledby="trace-h">
+    <h2 id="trace-h">Profit and loss, trade by trade</h2>
+    <div id="trace"></div>
+  </section>
+
+  <section class="wide log" aria-labelledby="log-h">
+    <h2 id="log-h">Autopilot logbook</h2>
+    <ol id="log" class="logbook"></ol>
+  </section>
+</main>
+<script src="desk.js"></script>
+</body>
+</html>
