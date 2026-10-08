@@ -62,8 +62,11 @@ def run_autopilot_command(
     dry_run = not args.execute
     out("autopilot: DRY RUN (no orders will be sent; add --execute for PAPER orders)" if dry_run
         else "autopilot: PAPER orders enabled (simulated money, real order flow)")
+    from src.execution.journal import Journal
+
+    journal = Journal()
     pilot = pilot_cls(args.symbols, runner=runner, executor=executor, broker=broker,
-                      dry_run=dry_run, interval_s=args.interval, out=out,
+                      dry_run=dry_run, interval_s=args.interval, out=journal.tee(out), heartbeat=journal.beat,
                       managed_symbols=store.managed_symbols)
     return pilot.run(max_cycles=1 if args.once else None)
 

@@ -200,3 +200,11 @@ def _reset_env_config():
     os.environ.clear()
     os.environ.update(saved_environ)
     reset_env_config()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_autopilot_journal(tmp_path, monkeypatch):
+    """Tests must never write to the real ~/.vibe-trading journal."""
+    import src.execution.journal as journal
+
+    monkeypatch.setattr(journal, "DEFAULT_PATH", tmp_path / "autopilot-journal.jsonl")

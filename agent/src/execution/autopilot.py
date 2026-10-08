@@ -49,6 +49,7 @@ class Autopilot:
         now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], None] = time.sleep,
         out: Callable[[str], None] = print,
+        heartbeat: Callable[[str, float], None] = lambda message, sleep_s: None,
         managed_symbols: Callable[[], set[str]] = lambda: set(),
     ) -> None:
         cleaned = [s.strip().upper() for s in symbols]
@@ -61,18 +62,42 @@ class Autopilot:
         self._flatten_minutes = flatten_minutes
         self._halted, self._now, self._sleep, self._out = halt_check, now_fn, sleep, out
         self._managed = managed_symbols
+        self._heartbeat = heartbeat
+        self._checked = self._submitted = 0
         self._closed_flatten_day = None
         self._flattened_day = None
         self._last: dict[str, tuple] = {}
 
     def cycle(self) -> CycleOutcome:
         """One pass. Never raises: an unexpected error becomes an 'error' outcome."""
+        self._checked = self._submitted = 0
         try:
-            return self._cycle()
+            outcome = self._cycle()
         except Exception as exc:
             logger.exception("autopilot cycle failed")
             self._out(f"cycle error ({type(exc).__name__}); will retry")
-            return CycleOutcome("error", self._interval)
+            outcome = CycleOutcome("error", self._interval)
+        self._beat(outcome)
+        return outcome
+
+    def _beat(self, outcome: CycleOutcome) -> None:
+        """Leave a trace every cycle, even a quiet one. Never allowed to disturb trading."""
+        n = self._checked
+        trades = f"{self._submitted} trade{'s' if self._submitted != 1 else ''}" if self._submitted else "no trades"
+        messages = {
+            "closed": "market closed; waiting for the open",
+            "halted": "kill switch is on; autopilot stopped",
+            "no_clock": "market clock unavailable; did nothing",
+            "closing": "end-of-day window; no new trades",
+            "flattened": "end of day: closed everything it opened",
+            "flatten_failed": "end of day: could not confirm everything is closed",
+            "error": "cycle error; will retry",
+        }
+        message = messages.get(outcome.status, f"checked {n} symbol{'s' if n != 1 else ''}, {trades}")
+        try:
+            self._heartbeat(message, outcome.sleep_s)
+        except Exception:
+            logger.warning("heartbeat failed", exc_info=True)
 
     def _cycle(self) -> CycleOutcome:
         if self._halted():
@@ -149,6 +174,8 @@ class Autopilot:
                 logger.exception("autopilot failed for %s", symbol)
                 self._report(symbol, ("failed", (type(exc).__name__,)))
                 continue
+            self._checked += 1
+            self._submitted += result.status == "submitted"
             traded = traded or result.status == "submitted"
             self._report(symbol, (result.status, result.reasons), result)
         return CycleOutcome("traded" if traded else "idle", sleep_s)
