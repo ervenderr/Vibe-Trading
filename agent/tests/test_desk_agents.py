@@ -21,7 +21,8 @@ def test_lists_runs_newest_first_with_report_names(tmp_path):
     make(tmp_path, "NVDA", "2026-10-12", market_report="a")
     make(tmp_path, "AAPL", "2026-10-13", market_report="a", final_trade_decision="b")
     os.utime(tmp_path / "NVDA" / "2026-10-12", (1, 1))
-    runs = list_runs(tmp_path)
+    import time
+    runs = list_runs(tmp_path, now=time.time() + 600)   # long after the files were written
     assert [(r["ticker"], r["date"]) for r in runs] == [("AAPL", "2026-10-13"), ("NVDA", "2026-10-12")]
     assert runs[0]["complete"] is True and runs[1]["complete"] is False
     assert "market_report" in runs[1]["reports"]
@@ -61,3 +62,12 @@ def test_symlinks_and_huge_files_are_handled(tmp_path):
     names = [r["name"] for r in run["reports"]]
     assert "leak" not in names                                  # a link out of the folder is never followed
     assert len(run["reports"][0]["text"]) <= MAX_REPORT_CHARS + 40 and run["reports"][0]["truncated"] is True
+
+
+def test_a_report_still_being_written_is_not_complete(tmp_path):
+    import time
+    make(tmp_path, market_report="a", final_trade_decision="partial")
+    final = tmp_path / "NVDA" / "2026-10-13" / "reports" / "final_trade_decision.md"
+    assert read_run(tmp_path, "NVDA", "2026-10-13", now=time.time())["complete"] is False        # just written
+    assert list_runs(tmp_path, now=time.time())[0]["complete"] is False
+    assert read_run(tmp_path, "NVDA", "2026-10-13", now=final.stat().st_mtime + 600)["complete"] is True   # settled
