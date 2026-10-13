@@ -99,6 +99,18 @@
     <div id="lab-out" aria-live="polite"></div>
   </section>
 
+  <section class="wide research" aria-labelledby="research-h">
+    <div class="sec-head">
+      <h2 id="research-h">AI research desk</h2>
+      <label class="sr" for="run-pick">Research run</label>
+      <select id="run-pick"></select>
+    </div>
+    <p class="hint">Reports from TradingAgents, a team of AI analysts, researchers and a trader that debate one stock. This is reading material, not a signal: our tests found no proven edge in AI reading the news.</p>
+    <div id="run-status" class="run-status"></div>
+    <div id="report-tabs" class="tools" role="tablist" aria-label="Reports"></div>
+    <article id="report-body" class="report" tabindex="0"></article>
+  </section>
+
   <section class="wide trace" aria-labelledby="trace-h">
     <h2 id="trace-h">Profit and loss, trade by trade</h2>
     <div id="trace"></div>
@@ -114,6 +126,7 @@
 <script src="lightweight-charts.js"></script>
 <script src="terminal.js"></script>
 <script src="lab.js"></script>
+<script src="research.js"></script>
 <script src="desk.js"></script>
 </body>
 </html>

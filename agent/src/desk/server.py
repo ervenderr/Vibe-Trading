@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
+from src.desk import agents
 from src.desk.lab import run_lab
 from src.desk.payloads import jsonable, signal_payload, state_payload, track_payload
 from src.execution.broker import BrokerError
@@ -143,12 +144,14 @@ class Desk:
                  bars_fn: Callable[[str, str], list[dict]] = _default_bars,
                  fills_fn: Callable[[str], list[dict]] = _default_fills,
                  history_fn: Callable[[str, str, float], Any] = _default_history,
+                 agents_base: Path = agents.DEFAULT_BASE,
                  halt_fn: Callable[[], bool] = _default_halt,
                  journal_fn: Callable[[int], list[dict]] = _default_journal,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
         self._broker_factory, self._signal, self._halt, self._journal, self._now = (
             broker_factory, signal_fn, halt_fn, journal_fn, now_fn)
         self._tick, self._bars, self._fills, self._history = tick_fn, bars_fn, fills_fn, history_fn
+        self._agents = Path(agents_base)
         self._broker: Any = None
         self._cache: dict[str, tuple[float, Any]] = {}
 
@@ -178,6 +181,11 @@ class Desk:
             return self._api_signal(query)
         if path == "/api/tick":
             return self._api_tick(query)
+        if path == "/api/agents":
+            return self._json({"runs": agents.list_runs(self._agents)})
+        if path == "/api/agents/run":
+            run = agents.read_run(self._agents, (query.get("ticker", [""])[0]).upper(), query.get("date", [""])[0])
+            return self._json(run, 200) if run else self._json({"error": "no such research run"}, 404)
         if path == "/api/backtest":
             return self._api_backtest(query)
         if path == "/api/fills":

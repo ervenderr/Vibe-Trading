@@ -173,3 +173,20 @@ input { background: var(--paper); border: 1.5px solid var(--ink); padding: .4rem
 .lab-table th:first-child, .lab-table td:first-child { text-align: left; }
 .lab-table thead th { font: 600 .95rem/1.1 var(--label); border-bottom: 2px solid var(--ink); }
 .lab h3 { font: 600 1.05rem/1.1 var(--label); margin-top: .8rem; }
+
+.research select { max-width: 16rem; }
+.run-status { margin: .4rem 0; }
+.chip { display: inline-block; padding: .2rem .6rem; font: 600 .9rem/1.2 var(--label); background: var(--avoid-tint); border-left: 5px solid var(--avoid); }
+.chip.done { background: var(--buy-tint); border-color: var(--buy); }
+.chip.wip { background: var(--wait-tint); border-color: var(--wait); }
+.tools button[role="tab"][aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.report { background: var(--paper); border: 1.5px solid var(--ink); padding: .8rem 1.1rem 1rem; margin-top: .6rem; max-height: 34rem; overflow: auto; max-width: 60rem; }
+.report h3 { font: 700 1.25rem/1.2 var(--label); margin: .9rem 0 .3rem; }
+.report h4 { font: 600 1.05rem/1.2 var(--label); margin: .7rem 0 .2rem; }
+.report p, .report li { max-width: 70ch; }
+.report p { margin: .35rem 0; }
+.report ul { margin: .3rem 0 .3rem 1.2rem; padding: 0; }
+.report code { font-family: var(--num); font-size: .85em; background: var(--avoid-tint); padding: 0 .25rem; }
+.report details { margin-top: 1rem; color: var(--muted); }
+.report pre { white-space: pre-wrap; font-size: .8rem; max-height: 14rem; overflow: auto; }
+.report .table-wrap { overflow-x: auto; }

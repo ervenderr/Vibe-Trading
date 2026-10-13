@@ -102,3 +102,15 @@ def test_backtest_route_validates_and_runs():
     assert ok[0] == 200 and "metrics" in json.loads(ok[2])
     assert d.handle("GET", "/api/backtest", {"symbol": ["../x"]}, host="localhost:1")[0] == 400
     assert d.handle("POST", "/api/backtest", {}, host="localhost:1")[0] == 405
+
+
+def test_agents_routes_list_and_read_reports(tmp_path):
+    reports = tmp_path / "NVDA" / "2026-10-13" / "reports"
+    reports.mkdir(parents=True)
+    (reports / "market_report.md").write_text("hello")
+    d = Desk(broker_factory=Broker, agents_base=tmp_path, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T)
+    listed = json.loads(d.handle("GET", "/api/agents", {}, host="localhost:1")[2])
+    assert listed["runs"][0]["ticker"] == "NVDA"
+    ok = d.handle("GET", "/api/agents/run", {"ticker": ["nvda"], "date": ["2026-10-13"]}, host="localhost:1")
+    assert ok[0] == 200 and json.loads(ok[2])["reports"][0]["text"] == "hello"
+    assert d.handle("GET", "/api/agents/run", {"ticker": ["../x"], "date": ["2026-10-13"]}, host="localhost:1")[0] == 404
