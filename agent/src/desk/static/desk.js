@@ -106,12 +106,16 @@ function renderPositions(state) {
   const box = $("positions");
   const rows = [];
   for (const p of state.positions || []) {
-    const qty = num(p.qty), pl = num(p.unrealized_pl);
-    const side = qty != null && qty < 0 ? "short" : "long";
+    // Alpaca's position fields differ by SDK version: accept both spellings.
+    const qty = num(p.qty ?? p.quantity), pl = num(p.unrealized_pl ?? p.unrealized_pnl);
+    const entry = num(p.avg_entry_price ?? p.average_cost), now = num(p.current_price);
+    const side = /short/i.test(String(p.side)) || (qty != null && qty < 0) ? "short" : "long";
+    const symbol = String(p.symbol || "?").slice(0, 10);
+    const unit = /USD$/.test(symbol) ? "units" : "shares";
     rows.push(h("div", { class: "pos-row " + side },
-      h("span", { class: "s", text: String(p.symbol || "?").slice(0, 10) }),
-      h("span", {}, `${side === "short" ? "Short" : "Long"} ${Math.abs(qty ?? 0)} shares`,
-        h("small", { text: "Bought at " + usd(num(p.avg_entry_price)) + ", now " + usd(num(p.current_price)) })),
+      h("span", { class: "s", text: symbol }),
+      h("span", {}, `${side === "short" ? "Short" : "Long"} ${Math.abs(qty ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${unit}`,
+        h("small", { text: "Bought at " + usd(entry) + ", now " + usd(now) })),
       h("b", { class: "num " + (pl > 0 ? "up" : pl < 0 ? "down" : ""), text: usd(pl, true) })));
   }
   const orders = state.orders || [];
@@ -313,7 +317,7 @@ function ensureChart() {
   volume = chart.addSeries(LightweightCharts.HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", color: css("--rule") });
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
 }
-function showError(message) { if (chart) { chart.remove(); chart = candles = volume = null; } $("live").replaceChildren(h("div", { class: "empty", text: message })); }
+function showError(message) { if (chart) { chart.remove(); chart = candles = volume = markers = null; } $("live").replaceChildren(h("div", { class: "empty", text: message })); }
 
 async function loadCandles() {
   try {
@@ -324,7 +328,21 @@ async function loadCandles() {
     volume.setData(d.bars.map((b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? css("--buy-tint") : css("--sell-tint") })));
     lastBar = { ...d.bars[d.bars.length - 1] };
     chart.timeScale().scrollToRealTime();
+    await loadFills(d.bars[0].time, size());
   } catch (e) { showError("Price history: " + e.message); }
+}
+const size = () => TF_SECONDS[liveTf];
+let markers = null;
+async function loadFills(firstTime, barSize) {
+  try {
+    const d = await api("/api/fills?symbol=" + encodeURIComponent(liveSym));
+    const pts = d.fills.filter((f) => f.time >= firstTime).map((f) => ({
+      time: Math.floor(f.time / barSize) * barSize, position: f.side === "buy" ? "belowBar" : "aboveBar",
+      shape: f.side === "buy" ? "arrowUp" : "arrowDown", color: f.side === "buy" ? css("--buy") : css("--sell"),
+      text: `${f.side === "buy" ? "Buy" : "Sell"} ${f.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
+    })).sort((a, b) => a.time - b.time);
+    if (markers) markers.setMarkers(pts); else markers = LightweightCharts.createSeriesMarkers(candles, pts);
+  } catch { /* markers are optional */ }
 }
 async function pollLive() {
   if (document.hidden || !candles || !lastBar) return;
@@ -344,7 +362,7 @@ async function pollLive() {
 }
 function watch(sym, tf) {
   liveSym = sym; liveTf = tf; store.set("desk.live", sym); store.set("desk.liveTf", tf);
-  lastBar = null; loadCandles();
+  lastBar = null; markers = null; loadCandles();
 }
 $("live-form").addEventListener("submit", (ev) => {
   ev.preventDefault();

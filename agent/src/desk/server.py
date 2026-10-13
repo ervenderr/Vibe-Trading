@@ -94,6 +94,21 @@ def _default_bars(symbol: str, tf: str) -> list[dict]:
              "close": b.close, "volume": b.volume} for b in reversed(raw)]
 
 
+def _default_fills(symbol: str) -> list[dict]:
+    """This account's recent filled orders for one symbol, for chart markers (read-only)."""
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.enums import QueryOrderStatus
+    from alpaca.trading.requests import GetOrdersRequest
+    from src.trading.connectors.alpaca import sdk
+
+    cfg = sdk.load_config()
+    client = _data_clients.setdefault("trading", TradingClient(cfg.api_key, cfg.secret_key, paper=True))
+    orders = client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, symbols=[symbol], limit=100))
+    return [{"time": int(o.filled_at.timestamp()), "side": str(o.side).split(".")[-1].lower(),
+             "price": float(o.filled_avg_price), "qty": float(o.filled_qty)}
+            for o in orders if o.filled_at and o.filled_avg_price and float(o.filled_qty or 0) > 0]
+
+
 def _default_halt() -> bool:
     from src.execution.executor import _default_halt as halted
 
@@ -111,12 +126,13 @@ class Desk:
                  signal_fn: Callable[[str], Any] = _default_signal,
                  tick_fn: Callable[[str], dict] = _default_tick,
                  bars_fn: Callable[[str, str], list[dict]] = _default_bars,
+                 fills_fn: Callable[[str], list[dict]] = _default_fills,
                  halt_fn: Callable[[], bool] = _default_halt,
                  journal_fn: Callable[[int], list[dict]] = _default_journal,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
         self._broker_factory, self._signal, self._halt, self._journal, self._now = (
             broker_factory, signal_fn, halt_fn, journal_fn, now_fn)
-        self._tick, self._bars = tick_fn, bars_fn
+        self._tick, self._bars, self._fills = tick_fn, bars_fn, fills_fn
         self._broker: Any = None
         self._cache: dict[str, tuple[float, Any]] = {}
 
@@ -146,6 +162,8 @@ class Desk:
             return self._api_signal(query)
         if path == "/api/tick":
             return self._api_tick(query)
+        if path == "/api/fills":
+            return self._api_fills(query)
         if path == "/api/bars":
             return self._api_bars(query)
         if path.startswith("/api/"):
@@ -214,6 +232,17 @@ class Desk:
         except Exception:
             logger.exception("bars failed for %s", symbol)
             return self._json({"error": "price history unavailable right now"}, 502)
+
+    def _api_fills(self, query: dict) -> tuple[int, str, bytes]:
+        symbol = (query.get("symbol", [""])[0] or "").strip().upper()
+        if not (_CRYPTO_RE.match(symbol) or is_valid_symbol(symbol)):
+            return self._json({"error": "invalid symbol"}, 400)
+        try:
+            fills = self._cached(f"fills:{symbol}", STATE_TTL_S, lambda: jsonable(self._fills(symbol)))
+            return self._json({"symbol": symbol, "fills": fills})
+        except Exception:
+            logger.exception("fills failed for %s", symbol)
+            return self._json({"error": "trade history unavailable right now"}, 502)
 
     def _static(self, path: str) -> tuple[int, str, bytes]:
         rel = "index.html" if path in ("", "/") else unquote(path).lstrip("/")

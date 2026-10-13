@@ -17,8 +17,9 @@ class Broker:
 
 
 def make(signal=lambda s: (_ for _ in ()).throw(RuntimeError("boom")), tick=lambda s: {"symbol": s, "bid": 1.0, "ask": 1.2, "last": 1.1, "t": "x"},
+         fills=lambda s: [{"time": 5, "side": "buy", "price": 1.0, "qty": 2.0}],
          bars=lambda s, tf: [{"time": 1, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 3}]):
-    return Desk(broker_factory=Broker, signal_fn=signal, tick_fn=tick, bars_fn=bars, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T)
+    return Desk(broker_factory=Broker, signal_fn=signal, tick_fn=tick, bars_fn=bars, fills_fn=fills, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T)
 
 
 def test_serves_index_and_assets_but_not_traversal():
@@ -75,4 +76,14 @@ def test_bars_validates_symbol_and_timeframe():
 def test_bars_failure_is_a_safe_502():
     d = make(bars=lambda s, tf: (_ for _ in ()).throw(RuntimeError("secret detail")))
     status, _, body = d.handle("GET", "/api/bars", {"symbol": ["GLD"], "tf": ["1Min"]}, host="localhost:1")
+    assert status == 502 and "secret" not in body.decode()
+
+
+def test_fills_endpoint_returns_markers_and_validates_symbol():
+    d = make()
+    status, _, body = d.handle("GET", "/api/fills", {"symbol": ["btc/usd"]}, host="localhost:1")
+    assert status == 200 and json.loads(body)["fills"][0]["side"] == "buy"
+    assert d.handle("GET", "/api/fills", {"symbol": ["../x"]}, host="localhost:1")[0] == 400
+    boom = make(fills=lambda s: (_ for _ in ()).throw(RuntimeError("secret")))
+    status, _, body = boom.handle("GET", "/api/fills", {"symbol": ["GLD"]}, host="localhost:1")
     assert status == 502 and "secret" not in body.decode()
