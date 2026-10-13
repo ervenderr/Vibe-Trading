@@ -87,3 +87,18 @@ def test_fills_endpoint_returns_markers_and_validates_symbol():
     boom = make(fills=lambda s: (_ for _ in ()).throw(RuntimeError("secret")))
     status, _, body = boom.handle("GET", "/api/fills", {"symbol": ["GLD"]}, host="localhost:1")
     assert status == 502 and "secret" not in body.decode()
+
+
+def test_backtest_route_validates_and_runs():
+    import numpy as np
+    import pandas as pd
+
+    def hist(symbol, interval, years):
+        rng = np.random.default_rng(0)
+        return pd.Series(100 * np.cumprod(1 + rng.normal(0.0004, 0.01, 800)), index=pd.bdate_range("2019-01-01", periods=800))
+
+    d = Desk(broker_factory=Broker, history_fn=hist, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T)
+    ok = d.handle("GET", "/api/backtest", {"symbol": ["SPY"], "strategy": ["sma_cross"]}, host="localhost:1")
+    assert ok[0] == 200 and "metrics" in json.loads(ok[2])
+    assert d.handle("GET", "/api/backtest", {"symbol": ["../x"]}, host="localhost:1")[0] == 400
+    assert d.handle("POST", "/api/backtest", {}, host="localhost:1")[0] == 405

@@ -1,46 +1,9 @@
 "use strict";
-/* Paper Desk. Read-only: this script only ever issues GET requests. All text from the
-   server (including news headlines) is inserted with textContent, never as HTML. */
+/* Paper Desk dashboard. Read-only: this script only ever issues GET requests.
+   Helpers are in util.js and the chart terminal is in terminal.js. */
 
-const SYMBOL_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 const DEFAULT_SYMBOLS = ["NVDA", "TSLA", "AAPL", "AMD", "META"];
 const FLATTEN_MINUTES = 10;
-const NY = "America/New_York";
-
-const $ = (id) => document.getElementById(id);
-function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === false || v == null) continue;
-    if (k === "class") el.className = v;
-    else if (k === "text") el.textContent = v;
-    else el.setAttribute(k, v === true ? "" : v);
-  }
-  for (const kid of kids.flat()) if (kid != null) el.append(kid);
-  return el;
-}
-const usd = (n, signed) => (n == null ? "n/a" : (signed && n > 0 ? "+" : "") + n.toLocaleString("en-US", { style: "currency", currency: "USD" }));
-const pct = (n) => (n == null ? "n/a" : (n * 100).toFixed(1) + "%");
-const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-const clock = (iso, opts) => new Date(iso).toLocaleString("en-US", { timeZone: NY, ...opts });
-const ago = (iso) => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 90) return "just now";
-  if (s < 5400) return Math.round(s / 60) + " min ago";
-  if (s < 129600) return Math.round(s / 3600) + " h ago";
-  return Math.round(s / 86400) + " days ago";
-};
-const store = {
-  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
-};
-async function api(path) {
-  const r = await fetch(path, { headers: { Accept: "application/json" } });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || "request failed");
-  return data;
-}
-
 /* ---------- header: market clock + autopilot pulse ---------- */
 let lastState = null;
 function renderClock() {
@@ -291,94 +254,7 @@ $("add").addEventListener("submit", (ev) => {
 $("sym").addEventListener("input", () => $("sym").setCustomValidity(""));
 $("refresh").addEventListener("click", loadSignals);
 
-/* ---------- live candles (TradingView's open-source Lightweight Charts) ---------- */
-const TF_SECONDS = { "1Min": 60, "5Min": 300, "15Min": 900 };
-let liveSym = store.get("desk.live", "BTC/USD");
-let liveTf = store.get("desk.liveTf", "1Min");
-let chart = null, candles = null, volume = null, lastBar = null;
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-function ensureChart() {
-  if (chart) return;
-  const box = $("live");
-  box.replaceChildren();
-  chart = LightweightCharts.createChart(box, {
-    autoSize: true, height: 420,
-    layout: { background: { color: css("--paper") }, textColor: css("--muted"), fontFamily: css("--num") },
-    grid: { vertLines: { color: css("--rule") }, horzLines: { color: css("--rule") } },
-    rightPriceScale: { borderColor: css("--ink") },
-    timeScale: { borderColor: css("--ink"), timeVisible: true, secondsVisible: false },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-  });
-  candles = chart.addSeries(LightweightCharts.CandlestickSeries, {
-    upColor: css("--buy"), downColor: css("--sell"), borderVisible: false,
-    wickUpColor: css("--buy"), wickDownColor: css("--sell"),
-  });
-  volume = chart.addSeries(LightweightCharts.HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", color: css("--rule") });
-  chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
-}
-function showError(message) { if (chart) { chart.remove(); chart = candles = volume = markers = null; } $("live").replaceChildren(h("div", { class: "empty", text: message })); }
-
-async function loadCandles() {
-  try {
-    const d = await api(`/api/bars?symbol=${encodeURIComponent(liveSym)}&tf=${liveTf}`);
-    if (!d.bars.length) { showError("No price history for " + liveSym + " yet."); return; }
-    ensureChart();
-    candles.setData(d.bars.map((b) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
-    volume.setData(d.bars.map((b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? css("--buy-tint") : css("--sell-tint") })));
-    lastBar = { ...d.bars[d.bars.length - 1] };
-    chart.timeScale().scrollToRealTime();
-    await loadFills(d.bars[0].time, size());
-  } catch (e) { showError("Price history: " + e.message); }
-}
-const size = () => TF_SECONDS[liveTf];
-let markers = null;
-async function loadFills(firstTime, barSize) {
-  try {
-    const d = await api("/api/fills?symbol=" + encodeURIComponent(liveSym));
-    const pts = d.fills.filter((f) => f.time >= firstTime).map((f) => ({
-      time: Math.floor(f.time / barSize) * barSize, position: f.side === "buy" ? "belowBar" : "aboveBar",
-      shape: f.side === "buy" ? "arrowUp" : "arrowDown", color: f.side === "buy" ? css("--buy") : css("--sell"),
-      text: `${f.side === "buy" ? "Buy" : "Sell"} ${f.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
-    })).sort((a, b) => a.time - b.time);
-    if (markers) markers.setMarkers(pts); else markers = LightweightCharts.createSeriesMarkers(candles, pts);
-  } catch { /* markers are optional */ }
-}
-async function pollLive() {
-  if (document.hidden || !candles || !lastBar) return;
-  try {
-    const d = await api("/api/tick?symbol=" + encodeURIComponent(liveSym));
-    const bid = num(d.bid), ask = num(d.ask);
-    const sane = bid > 0 && ask > 0 && ask >= bid && (ask - bid) / ask < 0.01;   // closed markets report junk quotes
-    const px = sane ? (bid + ask) / 2 : num(d.last);
-    if (px == null) return;
-    const size = TF_SECONDS[liveTf];
-    const bucket = Math.floor(Date.now() / 1000 / size) * size;
-    lastBar = bucket > lastBar.time
-      ? { time: bucket, open: lastBar.close, high: Math.max(lastBar.close, px), low: Math.min(lastBar.close, px), close: px, volume: 0 }
-      : { ...lastBar, high: Math.max(lastBar.high, px), low: Math.min(lastBar.low, px), close: px };
-    candles.update({ time: lastBar.time, open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close });
-  } catch { /* the next tick will try again */ }
-}
-function watch(sym, tf) {
-  liveSym = sym; liveTf = tf; store.set("desk.live", sym); store.set("desk.liveTf", tf);
-  lastBar = null; markers = null; loadCandles();
-}
-$("live-form").addEventListener("submit", (ev) => {
-  ev.preventDefault();
-  const v = $("live-sym").value.trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9.\-]{0,9}(\/USD)?$/.test(v)) { $("live-sym").setCustomValidity("Use a ticker like AAPL or a pair like BTC/USD"); $("live-sym").reportValidity(); return; }
-  $("live-sym").setCustomValidity("");
-  watch(v, $("live-tf").value);
-});
-$("live-tf").addEventListener("change", () => watch(liveSym, $("live-tf").value));
-$("live-sym").value = liveSym;
-$("live-tf").value = liveTf;
-$("live-sym").addEventListener("input", () => $("live-sym").setCustomValidity(""));
-
 pollState(); pollTrack(); loadSignals(); loadCandles();
-setInterval(pollLive, 1000);
-setInterval(() => { if (!document.hidden) loadCandles(); }, 60000);   // re-sync with the exchange candles
 setInterval(pollState, 5000);
 setInterval(pollTrack, 60000);
 setInterval(renderClock, 1000);

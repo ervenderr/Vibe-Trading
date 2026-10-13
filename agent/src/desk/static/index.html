@@ -22,7 +22,7 @@
 <main class="board">
   <section class="wide live" aria-labelledby="live-h">
     <div class="sec-head">
-      <h2 id="live-h">Live price, updated every second</h2>
+      <h2 id="live-h">Chart terminal</h2>
       <form id="live-form" class="add" autocomplete="off">
         <label class="sr" for="live-sym">Symbol to watch</label>
         <input id="live-sym" maxlength="10" value="BTC/USD" spellcheck="false">
@@ -31,7 +31,27 @@
         <button type="submit">Watch</button>
       </form>
     </div>
-    <div id="live"></div>
+    <div class="toolbar" role="toolbar" aria-label="Chart tools">
+      <div class="tools" id="indicator-tools" role="group" aria-label="Indicators"></div>
+      <div class="tools" role="group" aria-label="Drawing tools">
+        <button type="button" data-draw="level" aria-pressed="false">Price level</button>
+        <button type="button" data-draw="trend" aria-pressed="false">Trend line</button>
+        <button type="button" id="clear-draw" class="ghost">Clear drawings</button>
+        <span id="draw-hint" class="hint" aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="terminal">
+      <aside class="watch" aria-label="Watchlist">
+        <h3>Watchlist</h3>
+        <ul id="watch-list"></ul>
+        <form id="watch-form" class="add" autocomplete="off">
+          <label class="sr" for="watch-sym">Add to watchlist</label>
+          <input id="watch-sym" maxlength="10" placeholder="Add symbol" spellcheck="false">
+          <button type="submit">Add</button>
+        </form>
+      </aside>
+      <div id="live"></div>
+    </div>
   </section>
 
   <section class="rack" aria-labelledby="rack-h">
@@ -63,6 +83,22 @@
     </section>
   </aside>
 
+  <section class="wide lab" aria-labelledby="lab-h">
+    <h2 id="lab-h">Strategy lab</h2>
+    <p class="hint">Test a rule on past prices, with fees and slippage charged on every trade. A result is only the past: if the second half does much worse than the first, the rule is probably fitted to noise.</p>
+    <form id="lab-form" class="lab-form" autocomplete="off">
+      <label>Symbol <input id="lab-sym" maxlength="10" value="SPY" spellcheck="false"></label>
+      <label>Rule <select id="lab-strat"></select></label>
+      <span id="lab-params" class="lab-params"></span>
+      <label>Candles <select id="lab-interval"><option value="1D">Daily</option><option value="1H">Hourly</option></select></label>
+      <label>Years <input id="lab-years" type="number" min="0.5" max="20" step="0.5" value="5"></label>
+      <label>Fee per side (bps) <input id="lab-fee" type="number" min="0" max="500" step="1" value="5"></label>
+      <label>Slippage per side (bps) <input id="lab-slip" type="number" min="0" max="500" step="1" value="5"></label>
+      <button type="submit" id="lab-run">Run backtest</button>
+    </form>
+    <div id="lab-out" aria-live="polite"></div>
+  </section>
+
   <section class="wide trace" aria-labelledby="trace-h">
     <h2 id="trace-h">Profit and loss, trade by trade</h2>
     <div id="trace"></div>
@@ -73,7 +109,11 @@
     <ol id="log" class="logbook"></ol>
   </section>
 </main>
+<script src="util.js"></script>
+<script src="indicators.js"></script>
 <script src="lightweight-charts.js"></script>
+<script src="terminal.js"></script>
+<script src="lab.js"></script>
 <script src="desk.js"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
+from src.desk.lab import run_lab
 from src.desk.payloads import jsonable, signal_payload, state_payload, track_payload
 from src.execution.broker import BrokerError
 from src.signals.news_source import NewsFetchError, is_valid_symbol
@@ -25,7 +26,7 @@ from src.signals.news_source import NewsFetchError, is_valid_symbol
 logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
-STATE_TTL_S, TRACK_TTL_S, SIGNAL_TTL_S, TICK_TTL_S, BARS_TTL_S = 4.0, 30.0, 120.0, 0.8, 5.0
+STATE_TTL_S, TRACK_TTL_S, SIGNAL_TTL_S, TICK_TTL_S, BARS_TTL_S, LAB_TTL_S = 4.0, 30.0, 120.0, 0.8, 5.0, 300.0
 TIMEFRAMES = {"1Min": (1, "Minute"), "5Min": (5, "Minute"), "15Min": (15, "Minute")}
 MAX_BARS = 300
 MAX_TRACK_DAYS = 90
@@ -109,6 +110,20 @@ def _default_fills(symbol: str) -> list[dict]:
             for o in orders if o.filled_at and o.filled_avg_price and float(o.filled_qty or 0) > 0]
 
 
+def _default_history(symbol: str, interval: str, years: float):
+    """Closing prices for the backtester from the free Yahoo feed (read-only)."""
+    import pandas as pd
+    from src.market_data import get_loader
+
+    ticker = symbol.replace("/", "-")
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=int(years * 366))
+    frame = get_loader("yfinance")().fetch([ticker], start.isoformat(), end.isoformat(), interval=interval).get(ticker)
+    if frame is None or frame.empty:
+        return pd.Series(dtype=float)
+    return frame["close"]
+
+
 def _default_halt() -> bool:
     from src.execution.executor import _default_halt as halted
 
@@ -127,12 +142,13 @@ class Desk:
                  tick_fn: Callable[[str], dict] = _default_tick,
                  bars_fn: Callable[[str, str], list[dict]] = _default_bars,
                  fills_fn: Callable[[str], list[dict]] = _default_fills,
+                 history_fn: Callable[[str, str, float], Any] = _default_history,
                  halt_fn: Callable[[], bool] = _default_halt,
                  journal_fn: Callable[[int], list[dict]] = _default_journal,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
         self._broker_factory, self._signal, self._halt, self._journal, self._now = (
             broker_factory, signal_fn, halt_fn, journal_fn, now_fn)
-        self._tick, self._bars, self._fills = tick_fn, bars_fn, fills_fn
+        self._tick, self._bars, self._fills, self._history = tick_fn, bars_fn, fills_fn, history_fn
         self._broker: Any = None
         self._cache: dict[str, tuple[float, Any]] = {}
 
@@ -162,6 +178,8 @@ class Desk:
             return self._api_signal(query)
         if path == "/api/tick":
             return self._api_tick(query)
+        if path == "/api/backtest":
+            return self._api_backtest(query)
         if path == "/api/fills":
             return self._api_fills(query)
         if path == "/api/bars":
@@ -232,6 +250,13 @@ class Desk:
         except Exception:
             logger.exception("bars failed for %s", symbol)
             return self._json({"error": "price history unavailable right now"}, 502)
+
+    def _api_backtest(self, query: dict) -> tuple[int, str, bytes]:
+        key = "lab:" + "&".join(f"{k}={v[0]}" for k, v in sorted(query.items()) if v)
+        status, payload = self._cached(key, LAB_TTL_S, lambda: run_lab(query, history_fn=self._history))
+        if status != 200:
+            self._cache.pop(key, None)       # never cache failures
+        return self._json(payload, status)
 
     def _api_fills(self, query: dict) -> tuple[int, str, bytes]:
         symbol = (query.get("symbol", [""])[0] or "").strip().upper()
