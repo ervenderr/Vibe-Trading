@@ -139,3 +139,7 @@ input { background: var(--paper); border: 1.5px solid var(--ink); padding: .4rem
 }
 
 .rm { background: none; color: var(--muted); padding: 0; justify-self: start; text-decoration: underline; font-size: .85rem; }
+
+#live { height: 420px; border: 1.5px solid var(--ink); background: var(--paper); }
+#live .empty { border: 0; }
+.add select { background: var(--paper); border: 1.5px solid var(--ink); padding: .4rem .5rem; border-radius: 2px; font: inherit; color: inherit; }

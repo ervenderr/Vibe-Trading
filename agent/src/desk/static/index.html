@@ -19,6 +19,20 @@
 <div id="banner" class="banner" hidden></div>
 
 <main class="board">
+  <section class="wide live" aria-labelledby="live-h">
+    <div class="sec-head">
+      <h2 id="live-h">Live price, updated every second</h2>
+      <form id="live-form" class="add" autocomplete="off">
+        <label class="sr" for="live-sym">Symbol to watch</label>
+        <input id="live-sym" maxlength="10" value="BTC/USD" spellcheck="false">
+        <label class="sr" for="live-tf">Candle size</label>
+        <select id="live-tf"><option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option></select>
+        <button type="submit">Watch</button>
+      </form>
+    </div>
+    <div id="live"></div>
+  </section>
+
   <section class="rack" aria-labelledby="rack-h">
     <div class="sec-head">
       <h2 id="rack-h">What the signals say right now</h2>
@@ -58,6 +72,7 @@
     <ol id="log" class="logbook"></ol>
   </section>
 </main>
+<script src="lightweight-charts.js"></script>
 <script src="desk.js"></script>
 </body>
 </html>
