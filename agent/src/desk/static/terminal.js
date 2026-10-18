@@ -18,6 +18,7 @@ let bars = [];                       // [{time, open, high, low, close, volume}]
 let indSeries = [];                  // [{key, series, pick}]: pick(computed) -> values aligned with bars
 let drawn = { lines: [], trends: [] };
 let draw = { mode: null, pending: null };
+let snrOn = Boolean(store.get("desk.snr", false)), snrLines = [];
 
 const nyTime = (opts) => (sec) => new Date(sec * 1000).toLocaleString("en-US", { timeZone: NY, ...opts });
 const tickLabel = (time, type) => (type >= 3
@@ -66,6 +67,7 @@ async function loadCandles(keepView = false) {
     volume.setData(bars.map((b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? css("--buy-tint") : css("--sell-tint") })));
     paintIndicators();
     restoreDrawings();
+    paintSnr();
     if (!keepView) chart.timeScale().scrollToRealTime();
     await loadFills(bars[0].time);
   } catch (e) { showError("Price history: " + e.message); }
@@ -189,6 +191,30 @@ function onChartClick(param) {
     $("draw-hint").textContent = "Trend line added. Click two more points, or press Esc.";
   }
 }
+
+/* ---------- Malaysian SnR levels (A peaks, V valleys, gaps; solid = fresh) ---------- */
+function clearSnr() { snrLines.forEach((l) => candles && candles.removePriceLine(l)); snrLines = []; }
+async function paintSnr() {
+  clearSnr();
+  if (!snrOn || !candles) return;
+  try {
+    const d = await api(`/api/snr?symbol=${encodeURIComponent(liveSym)}&tf=${liveTf}`);
+    clearSnr();
+    snrLines = d.levels.map((l) => {
+      const support = l.kind === "V" || l.kind === "GAP_UP";
+      return candles.createPriceLine({
+        price: l.price, color: support ? css("--buy") : css("--sell"), lineWidth: l.fresh ? 2 : 1,
+        lineStyle: l.fresh ? 0 : 2, axisLabelVisible: l.fresh, title: `${l.kind.replace("GAP_", "gap ")}${l.fresh ? " fresh" : ""}`,
+      });
+    });
+  } catch { /* levels are optional */ }
+}
+$("snr-toggle").setAttribute("aria-pressed", String(snrOn));
+$("snr-toggle").addEventListener("click", () => {
+  snrOn = !snrOn; store.set("desk.snr", snrOn);
+  $("snr-toggle").setAttribute("aria-pressed", String(snrOn));
+  paintSnr();
+});
 
 /* ---------- live updates ---------- */
 async function pollLive() {

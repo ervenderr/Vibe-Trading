@@ -18,11 +18,14 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
+import pandas as pd
+
 from src.desk import agents
 from src.desk.lab import run_lab
 from src.desk.payloads import jsonable, signal_payload, state_payload, track_payload
 from src.execution.broker import BrokerError
 from src.signals.news_source import NewsFetchError, is_valid_symbol
+from src.signals.snr import levels_asof
 
 logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -30,6 +33,8 @@ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 STATE_TTL_S, TRACK_TTL_S, SIGNAL_TTL_S, TICK_TTL_S, BARS_TTL_S, LAB_TTL_S = 4.0, 30.0, 120.0, 0.8, 5.0, 300.0
 TIMEFRAMES = {"1Min": (1, "Minute"), "5Min": (5, "Minute"), "15Min": (15, "Minute")}
 MAX_BARS = 300
+MAX_SNR_PER_SIDE = 5
+SNR_MIN_GAP = 0.0012   # levels closer than 0.12% of the price are drawn once
 MAX_TRACK_DAYS = 90
 CSP = ("default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
        "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
@@ -125,6 +130,17 @@ def _default_history(symbol: str, interval: str, years: float):
     return frame["close"]
 
 
+def _spread_levels(levels: list[dict], last: float) -> list[dict]:
+    """The nearest levels on each side of the price, merging near-duplicates so the labels stay readable."""
+    chosen: list[dict] = []
+    for level in sorted(levels, key=lambda l: (abs(l["price"] - last), not l["fresh"])):
+        side_count = sum(1 for c in chosen if (c["price"] >= last) == (level["price"] >= last))
+        close = any(abs(c["price"] - level["price"]) <= last * SNR_MIN_GAP for c in chosen)
+        if side_count < MAX_SNR_PER_SIDE and not close:
+            chosen.append(level)
+    return sorted(chosen, key=lambda l: -l["price"])
+
+
 def _default_halt() -> bool:
     from src.execution.executor import _default_halt as halted
 
@@ -186,6 +202,8 @@ class Desk:
         if path == "/api/agents/run":
             run = agents.read_run(self._agents, (query.get("ticker", [""])[0]).upper(), query.get("date", [""])[0])
             return self._json(run, 200) if run else self._json({"error": "no such research run"}, 404)
+        if path == "/api/snr":
+            return self._api_snr(query)
         if path == "/api/backtest":
             return self._api_backtest(query)
         if path == "/api/fills":
@@ -266,6 +284,21 @@ class Desk:
             self._cache.pop(key, None)       # never cache failures
         return self._json(payload, status)
 
+    def _api_snr(self, query: dict) -> tuple[int, str, bytes]:
+        symbol = (query.get("symbol", [""])[0] or "").strip().upper()
+        tf = query.get("tf", ["1Min"])[0]
+        if not (_CRYPTO_RE.match(symbol) or is_valid_symbol(symbol)) or tf not in TIMEFRAMES:
+            return self._json({"error": "invalid symbol or timeframe"}, 400)
+        try:
+            bars = self._cached(f"bars:{symbol}:{tf}", BARS_TTL_S, lambda: jsonable(self._bars(symbol, tf)))
+            frame = pd.DataFrame(bars).set_index(pd.to_datetime([b["time"] for b in bars], unit="s"))
+            levels = levels_asof(frame, max_age=250)
+        except Exception:
+            logger.exception("snr failed for %s", symbol)
+            return self._json({"error": "levels unavailable right now"}, 502)
+        last = float(frame["close"].iloc[-1])
+        return self._json({"symbol": symbol, "tf": tf, "levels": jsonable(_spread_levels(levels, last))})
+
     def _api_fills(self, query: dict) -> tuple[int, str, bytes]:
         symbol = (query.get("symbol", [""])[0] or "").strip().upper()
         if not (_CRYPTO_RE.match(symbol) or is_valid_symbol(symbol)):
@@ -335,6 +368,20 @@ def make_handler(desk: Desk) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+def warm_imports() -> None:
+    """Import the market-data libraries once, before serving. Imported lazily from several request threads
+    at the same moment they can deadlock and make a request fail with a 502."""
+    import importlib
+
+    for name in ("alpaca.data.historical.stock", "alpaca.data.historical.crypto", "alpaca.data.requests",
+                 "alpaca.data.timeframe", "alpaca.data.enums", "alpaca.common.enums", "alpaca.trading.client",
+                 "alpaca.trading.requests", "alpaca.trading.enums", "src.trading.connectors.alpaca.sdk"):
+        try:
+            importlib.import_module(name)
+        except Exception:      # a missing optional dependency is reported by the request that needs it
+            logger.warning("could not pre-import %s", name)
+
+
 def serve(port: int = 8765) -> None:
     try:
         from src.providers.llm import _ensure_dotenv
@@ -342,6 +389,7 @@ def serve(port: int = 8765) -> None:
         _ensure_dotenv()  # same key loading as the CLI
     except Exception:  # keys may also come from the real environment
         logger.warning("could not load .env; relying on the process environment")
+    warm_imports()
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(Desk()))
     print(f"Paper Desk (read-only) on http://127.0.0.1:{port}  ·  Ctrl+C to stop")
     try:

@@ -114,3 +114,33 @@ def test_agents_routes_list_and_read_reports(tmp_path):
     ok = d.handle("GET", "/api/agents/run", {"ticker": ["nvda"], "date": ["2026-10-13"]}, host="localhost:1")
     assert ok[0] == 200 and json.loads(ok[2])["reports"][0]["text"] == "hello"
     assert d.handle("GET", "/api/agents/run", {"ticker": ["../x"], "date": ["2026-10-13"]}, host="localhost:1")[0] == 404
+
+
+def test_snr_route_returns_nearest_levels_with_freshness():
+    rows = [(105, 105.5, 103.5, 104), (104, 104.5, 101.5, 102), (102, 102.5, 99.8, 100),
+            (101, 102.5, 100.6, 102), (102, 104.5, 101.8, 104), (104, 105.5, 103.8, 105), (105, 106.5, 104.8, 106)]
+    bars = [{"time": 1_700_000_000 + 86400 * i, "open": o, "high": h, "low": l, "close": c, "volume": 1} for i, (o, h, l, c) in enumerate(rows)]
+    d = Desk(broker_factory=Broker, bars_fn=lambda s, tf: bars, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T)
+    status, _, body = d.handle("GET", "/api/snr", {"symbol": ["GLD"], "tf": ["5Min"]}, host="localhost:1")
+    levels = json.loads(body)["levels"]
+    assert status == 200 and any(l["kind"] == "V" and l["price"] == 100.0 and l["fresh"] for l in levels)
+    assert all(set(l) >= {"kind", "price", "fresh", "time"} for l in levels)
+    assert d.handle("GET", "/api/snr", {"symbol": ["../x"], "tf": ["5Min"]}, host="localhost:1")[0] == 400
+    assert d.handle("GET", "/api/snr", {"symbol": ["GLD"], "tf": ["1Week"]}, host="localhost:1")[0] == 400
+
+
+def test_warm_imports_is_safe_to_call_repeatedly():
+    from src.desk.server import warm_imports
+    warm_imports()
+    warm_imports()
+
+
+def test_snr_levels_are_thinned_to_five_per_side_without_near_duplicates():
+    from src.desk.server import _spread_levels
+    levels = [{"kind": "V", "price": 100 - i * 0.01, "fresh": True} for i in range(10)] + \
+             [{"kind": "V", "price": 90 - i * 2, "fresh": True} for i in range(8)] + \
+             [{"kind": "A", "price": 110 + i * 2, "fresh": False} for i in range(8)]
+    out = _spread_levels(levels, last=101.0)
+    below = [l for l in out if l["price"] < 101]
+    assert len(below) == 5 and len([l for l in out if l["price"] >= 101]) == 5
+    assert sum(1 for l in below if l["price"] > 99.5) == 1            # the ten levels within 0.1 of each other merge into one
