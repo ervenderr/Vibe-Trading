@@ -159,3 +159,19 @@ def test_sells_the_quantity_actually_held_after_the_fee():
     go(t, lambda s: report(), [{"bid": 99.9, "ask": 100.0}, {"bid": 101.6, "ask": 101.7}])
     bought, sold = t.orders[0][1], t.orders[1][1]
     assert sold == pytest.approx(bought * 0.9975)
+
+
+def test_alpaca_sell_never_exceeds_the_real_position():
+    from src.execution.crypto_demo import AlpacaCryptoTrader
+
+    class Client:
+        def get_open_position(self, symbol):
+            assert symbol == "BTCUSD"
+            return type("P", (), {"qty": "0.0604"})()
+
+    trader = AlpacaCryptoTrader.__new__(AlpacaCryptoTrader)
+    trader._client = Client()
+    sent = []
+    trader._market = lambda symbol, qty, side: (sent.append(qty), (100.0, qty))[1]
+    trader.sell("BTC/USD", 0.060552)
+    assert sent == [0.0604]

@@ -180,5 +180,17 @@ class AlpacaCryptoTrader:
     def buy(self, symbol: str, qty: float) -> tuple[float, float]:
         return self._market(symbol, qty, "buy")
 
+    def held_qty(self, symbol: str) -> float:
+        try:
+            return float(self._client.get_open_position(symbol.replace("/", "")).qty)
+        except Exception as exc:  # Alpaca raises when there is no position
+            if "position does not exist" in str(exc).lower():
+                return 0.0
+            raise
+
     def sell(self, symbol: str, qty: float) -> float:
+        # fees come out of the coins after the fill, so never ask to sell more than the account holds
+        qty = min(qty, self.held_qty(symbol))
+        if qty <= 0:
+            raise RuntimeError(f"no {symbol} position to sell")
         return self._market(symbol, qty, "sell")[0]
