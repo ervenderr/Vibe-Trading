@@ -44,3 +44,11 @@ Also reported: all 13 variants' tuning and test numbers, for context only (not u
 
 ## Not claimed
 Passing means the rule did not fail on past data. It does not mean future profit.
+
+## Result (run 2026-10-20, code commit before run; raw output in ~/.vibe-trading/research/crypto_study.json)
+**No timeframe passed. Outcome: "no robust edge found"; the current paper bot is unchanged.**
+- 1D: selected breakout20 (tuning Sharpe 1.23). Test: CAGR +16.8% vs hold +37.6%; Sharpe 0.67 vs 0.87; max DD 40% vs 60%;
+  bootstrap lower bound -0.47. Failed Sharpe-vs-hold and bootstrap.
+- 4h (only ~2y of data): selected cross50_200. Test: CAGR +2.9% vs hold -33.0%; Sharpe 0.24; max DD 17% vs 56%; 12 round trips;
+  bootstrap lower bound -1.66. Failed bootstrap. The window is one bear-ish year, so this is weak evidence either way.
+- On 1D, no variant beat hold's Sharpe except sma50 (test 1.21), which was NOT selected on tuning data; promoting it now would be data-snooping.
