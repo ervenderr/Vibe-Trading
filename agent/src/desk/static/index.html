@@ -20,6 +20,14 @@
 <div id="banner" class="banner" hidden></div>
 
 <main class="board">
+  <section class="wide floor" aria-labelledby="floor-h">
+    <div class="sec-head"><h2 id="floor-h">Agent floor</h2><span id="floor-note" class="hint"></span></div>
+    <div id="ticker" class="ticker" aria-label="Live crypto prices"></div>
+    <div id="floor" class="floor-grid"></div>
+    <h3 class="feed-h">Live activity</h3>
+    <ol id="feed" class="feed" aria-live="polite"></ol>
+  </section>
+
   <section class="wide live" aria-labelledby="live-h">
     <div class="sec-head">
       <h2 id="live-h">Chart terminal</h2>
@@ -130,6 +138,7 @@
 <script src="terminal.js"></script>
 <script src="lab.js"></script>
 <script src="research.js"></script>
+<script src="floor.js"></script>
 <script src="desk.js"></script>
 </body>
 </html>

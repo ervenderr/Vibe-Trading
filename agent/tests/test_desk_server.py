@@ -144,3 +144,18 @@ def test_snr_levels_are_thinned_to_five_per_side_without_near_duplicates():
     below = [l for l in out if l["price"] < 101]
     assert len(below) == 5 and len([l for l in out if l["price"] >= 101]) == 5
     assert sum(1 for l in below if l["price"] > 99.5) == 1            # the ten levels within 0.1 of each other merge into one
+
+
+def test_floor_returns_only_whitelisted_briefing_fields(tmp_path):
+    f = tmp_path / "floor.json"
+    f.write_text(json.dumps([{"agent": "Scout", "role": "r", "t": "2026-10-21T13:00:00Z", "headline": "WAIT", "bullets": ["a"],
+                              "secret": "x", "calls": [{"symbol": "BTC", "call": "WAIT", "note": "n", "extra": 1}]}, "junk"]))
+    d = Desk(broker_factory=Broker, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T, floor_path=f)
+    status, _, body = d.handle("GET", "/api/floor", {}, host="127.0.0.1:1")
+    rows = json.loads(body)["briefings"]
+    assert status == 200 and len(rows) == 1 and "secret" not in rows[0] and "extra" not in rows[0]["calls"][0]
+
+
+def test_floor_is_empty_when_file_missing(tmp_path):
+    d = Desk(broker_factory=Broker, halt_fn=lambda: False, journal_fn=lambda n: [], now_fn=lambda: T, floor_path=tmp_path / "none.json")
+    assert json.loads(d.handle("GET", "/api/floor", {}, host="127.0.0.1:1")[2]) == {"briefings": []}

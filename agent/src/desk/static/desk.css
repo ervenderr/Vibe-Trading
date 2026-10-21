@@ -190,3 +190,39 @@ input { background: var(--paper); border: 1.5px solid var(--ink); padding: .4rem
 .report details { margin-top: 1rem; color: var(--muted); }
 .report pre { white-space: pre-wrap; font-size: .8rem; max-height: 14rem; overflow: auto; }
 .report .table-wrap { overflow-x: auto; }
+
+/* Agent floor */
+.floor-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: .75rem; }
+.agent-card { background: var(--paper); border: 1.5px solid var(--ink); border-radius: 4px; padding: .8rem .9rem; display: flex; flex-direction: column; gap: .5rem; position: relative; overflow: hidden; }
+.agent-card header { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.agent-card h3 { font: 700 1.1rem/1 var(--label); letter-spacing: .04em; }
+.agent-card .role { color: var(--muted); font-size: .8rem; }
+.agent-card .headline { font-weight: 600; }
+.agent-card ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .85rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.chip { font: 700 .75rem/1 var(--num); padding: .3rem .45rem; border-radius: 2px; }
+.chip.buy { background: var(--buy-tint); color: var(--buy); }
+.chip.wait { background: var(--wait-tint); color: var(--wait); }
+.chip.avoid { background: var(--avoid-tint); color: var(--avoid); }
+.dot { width: .7rem; height: .7rem; border-radius: 50%; background: var(--avoid); display: inline-block; }
+.dot.live { background: var(--buy); box-shadow: 0 0 0 0 var(--buy); animation: pulse 1.8s infinite; }
+.scan { height: 3px; background: var(--rule); position: relative; overflow: hidden; border-radius: 2px; }
+.agent-card.working .scan::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; background: var(--buy); animation: sweep 1.6s ease-in-out infinite; }
+.agent-card.working { border-color: var(--buy); }
+.type { font-family: var(--num); font-size: .8rem; min-height: 2.4em; }
+.ticker { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: .5rem; }
+.tick { display: flex; gap: .5rem; align-items: baseline; font: 600 1.1rem/1 var(--num); }
+.tick .sym { font: 700 1rem/1 var(--label); color: var(--muted); }
+.tick.up .px { color: var(--buy); animation: flash 1s; }
+.tick.down .px { color: var(--sell); animation: flash 1s; }
+.feed-h { font: 600 1rem/1 var(--label); margin: 1rem 0 .4rem; letter-spacing: .03em; }
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
+.feed li { display: grid; grid-template-columns: 8.5rem 1fr auto; gap: .75rem; padding: .35rem .5rem; border-left: 3px solid var(--rule); font-size: .9rem; }
+.feed li.new { animation: slidein .5s ease-out; border-left-color: var(--buy); }
+.feed .who { font: 700 .85rem/1.4 var(--label); letter-spacing: .04em; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 .5rem transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@keyframes flash { from { opacity: .3; } to { opacity: 1; } }
+@keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dot.live, .scan::after, .feed li.new, .tick .px { animation: none !important; } }
+@media (max-width: 600px) { .feed li { grid-template-columns: 1fr; } }

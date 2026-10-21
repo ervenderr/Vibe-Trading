@@ -153,6 +153,29 @@ def _default_journal(limit: int) -> list[dict]:
     return Journal().recent(limit)
 
 
+DEFAULT_FLOOR = Path.home() / ".vibe-trading" / "research" / "agent_floor.json"
+FLOOR_TEXT = ("agent", "role", "t", "headline")
+MAX_FLOOR = 20
+
+
+def _floor_briefings(path: Path) -> list[dict]:
+    """Briefings written by the desk's Claude Code agents. Untrusted text: only known fields are passed on."""
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    out = []
+    for row in rows[-MAX_FLOOR:] if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        item = {k: str(row.get(k, ""))[:300] for k in FLOOR_TEXT}
+        item["bullets"] = [str(b)[:400] for b in row.get("bullets", [])[:6]] if isinstance(row.get("bullets"), list) else []
+        item["calls"] = [{k: str(c.get(k, ""))[:200] for k in ("symbol", "call", "note")}
+                         for c in row.get("calls", [])[:6] if isinstance(c, dict)] if isinstance(row.get("calls"), list) else []
+        out.append(item)
+    return out
+
+
 class Desk:
     def __init__(self, *, broker_factory: Callable[[], Any] = _default_broker,
                  signal_fn: Callable[[str], Any] = _default_signal,
@@ -163,11 +186,13 @@ class Desk:
                  agents_base: Path = agents.DEFAULT_BASE,
                  halt_fn: Callable[[], bool] = _default_halt,
                  journal_fn: Callable[[int], list[dict]] = _default_journal,
+                 floor_path: Path = DEFAULT_FLOOR,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
         self._broker_factory, self._signal, self._halt, self._journal, self._now = (
             broker_factory, signal_fn, halt_fn, journal_fn, now_fn)
         self._tick, self._bars, self._fills, self._history = tick_fn, bars_fn, fills_fn, history_fn
         self._agents = Path(agents_base)
+        self._floor = Path(floor_path)
         self._broker: Any = None
         self._cache: dict[str, tuple[float, Any]] = {}
 
@@ -202,6 +227,8 @@ class Desk:
         if path == "/api/agents/run":
             run = agents.read_run(self._agents, (query.get("ticker", [""])[0]).upper(), query.get("date", [""])[0])
             return self._json(run, 200) if run else self._json({"error": "no such research run"}, 404)
+        if path == "/api/floor":
+            return self._json({"briefings": _floor_briefings(self._floor)})
         if path == "/api/snr":
             return self._api_snr(query)
         if path == "/api/backtest":
