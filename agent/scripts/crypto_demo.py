@@ -27,6 +27,9 @@ def main() -> int:
     ap.add_argument("--notional", type=float, default=1000.0)
     ap.add_argument("--wait-minutes", type=float, default=30.0)
     ap.add_argument("--max-hold", type=float, default=900.0)
+    ap.add_argument("--pair", default="BTC", help="coin, e.g. SOL (avoid BTC/ETH while the trend bot holds them)")
+    ap.add_argument("--cycles", type=int, default=1, help="how many entry-and-exit rounds to run")
+    ap.add_argument("--max-loss", type=float, default=400.0, help="stop for good once this bot's own net loss reaches this (USD)")
     args = ap.parse_args()
     if not args.execute:
         print("add --execute to place PAPER orders on the demo account")
@@ -41,10 +44,18 @@ def main() -> int:
         journal.append(message)
 
     broker = AlpacaPaperBroker()
-    result = run_demo(DemoConfig(notional=args.notional, wait_minutes=args.wait_minutes, max_hold_s=args.max_hold),
-                      trader=AlpacaCryptoTrader(broker), signal_fn=run_signal, quote_fn=_default_tick,
-                      log=log, halted=_default_halt)
-    return 0 if result.exit_reason or result.entry is None else 1
+    trader = AlpacaCryptoTrader(broker)
+    coin = args.pair.upper()
+    cfg = DemoConfig(symbol=f"{coin}/USD", signal_symbol=f"{coin}-USD", notional=args.notional,
+                     wait_minutes=args.wait_minutes, max_hold_s=args.max_hold)
+    result, total = None, 0.0
+    for i in range(args.cycles):
+        if _default_halt() or total <= -args.max_loss:
+            log(f"CRYPTO DEMO: stopping before cycle {i + 1} (kill switch, or own net {total:+.2f} hit the -{args.max_loss:,.0f} limit)")
+            break
+        result = run_demo(cfg, trader=trader, signal_fn=run_signal, quote_fn=_default_tick, log=log, halted=_default_halt)
+        total += result.net_pnl or 0.0
+    return 0 if result is None or result.exit_reason or result.entry is None else 1
 
 
 if __name__ == "__main__":

@@ -175,3 +175,42 @@ def test_alpaca_sell_never_exceeds_the_real_position():
     trader._market = lambda symbol, qty, side: (sent.append(qty), (100.0, qty))[1]
     trader.sell("BTC/USD", 0.060552)
     assert sent == [0.0604]
+
+
+def test_target_too_close_to_cover_fees_is_not_entered():
+    t = Trader()
+    r, logs = go(t, lambda s: report(entry=100.0, stop=99.6, target=100.63), [{"bid": 99.9, "ask": 100.0}])
+    assert t.orders == [] and any("too close to pay the fees" in m for m in logs)
+
+
+def test_net_pnl_uses_own_fills_not_account_equity():
+    t = Trader(fill=100.0)
+    t.fee_rate, t.exit_fill, t.equity = 0.0025, 101.6, [0.0, 123456.0]  # equity must be ignored
+    r, _ = go(t, lambda s: report(), [{"bid": 99.9, "ask": 100.0}, {"bid": 101.6, "ask": 101.7}])
+    bought = t.orders[0][1]
+    assert r.net_pnl == pytest.approx(bought * 0.9975 * 101.6 * 0.9975 - bought * 100.0)
+
+
+def test_timed_out_order_is_cancelled_and_a_late_fill_is_still_tracked(monkeypatch):
+    import src.execution.crypto_demo as cd
+
+    monkeypatch.setattr(cd, "FILL_TIMEOUT_S", 0.0)
+    pytest.importorskip("alpaca")
+
+    class Client:
+        cancelled = False
+
+        def submit_order(self, req):
+            return type("O", (), {"id": "1", "status": "new", "filled_avg_price": None, "filled_qty": "0"})()
+
+        def get_order_by_id(self, _):
+            filled = self.cancelled
+            return type("O", (), {"id": "1", "status": "new", "filled_avg_price": "100" if filled else None,
+                                  "filled_qty": "0.5" if filled else "0"})()
+
+        def cancel_order_by_id(self, _):
+            self.cancelled = True
+
+    trader = cd.AlpacaCryptoTrader.__new__(cd.AlpacaCryptoTrader)
+    trader._client = Client()
+    assert trader._market("SOL/USD", 0.5, "buy") == (100.0, 0.5) and trader._client.cancelled

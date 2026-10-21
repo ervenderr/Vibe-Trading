@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 MAX_SPREAD = 0.003  # no entry when buy and sell prices are more than 0.3% apart
 MAX_SIGNAL_AGE_S = 1800
 FILL_TIMEOUT_S = 20.0
+MIN_TARGET_PCT = 0.015  # 3x the ~0.5% round-trip fee; closer targets cannot pay for their own costs
+FEE_RATE = 0.0025  # Alpaca crypto taker fee per side
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,8 @@ def _entry_ok(report: Any, quote: dict, now: datetime, min_confidence: float) ->
         return "price data stale"
     if v.confidence < min_confidence:
         return f"confidence {v.confidence:.2f} below {min_confidence:.2f}"
+    if (v.target - v.entry) / v.entry < MIN_TARGET_PCT - 1e-9:
+        return f"target {(v.target - v.entry) / v.entry:.2%} away is too close to pay the fees"
     if _spread(quote) > MAX_SPREAD:
         return "spread too wide"
     if (now - report.generated_at).total_seconds() > MAX_SIGNAL_AGE_S:
@@ -112,7 +116,6 @@ def _hold(cfg, report, quote, trader, quote_fn, log, halted, now_fn, sleep) -> D
     v = report.verdict
     stop_dist, target_dist = v.entry - v.stop, v.target - v.entry
     qty = math.floor(cfg.notional / float(quote["ask"]) * 1e6) / 1e6
-    equity_before = trader.equity_now()
     entry, held_qty = trader.buy(cfg.symbol, qty)  # held < qty: the fee is taken in coins
     stop, target = entry - stop_dist, entry + target_dist
     log(f"CRYPTO DEMO entered: bought {qty} {cfg.symbol} at {entry:,.2f} (confidence {v.confidence:.2f}); "
@@ -137,7 +140,7 @@ def _hold(cfg, report, quote, trader, quote_fn, log, halted, now_fn, sleep) -> D
             log(f"CRYPTO DEMO SELL FAILED ({type(exc).__name__}): the {cfg.symbol} position may still be open")
             raise
     gross = (exit_price - entry) * held_qty
-    net = trader.equity_now() - equity_before
+    net = held_qty * exit_price * (1 - FEE_RATE) - qty * entry  # own fills only, not the whole account
     log(f"CRYPTO DEMO closed on {reason}: sold at {exit_price:,.2f}; gross {gross:+.2f}, net after fees {net:+.2f} USD")
     return DemoResult(reason, entry, exit_price, held_qty, stop, target, gross, net)
 
@@ -175,6 +178,13 @@ class AlpacaCryptoTrader:
             if str(order.status).lower().endswith("filled") and order.filled_avg_price:
                 return float(order.filled_avg_price), float(order.filled_qty)
             time.sleep(0.5)
+        try:
+            self._client.cancel_order_by_id(order.id)  # never leave an order live that we have stopped tracking
+        except Exception:
+            logger.warning("could not cancel timed-out %s order %s", side, order.id)
+        order = self._client.get_order_by_id(order.id)
+        if float(order.filled_qty or 0) > 0:  # it filled in the gap before the cancel
+            return float(order.filled_avg_price), float(order.filled_qty)
         raise RuntimeError(f"{side} order not filled within {FILL_TIMEOUT_S:.0f}s")
 
     def buy(self, symbol: str, qty: float) -> tuple[float, float]:
