@@ -38,3 +38,7 @@ Trend rules lagging buy-and-hold in a rising market is expected and is not a fai
 
 ## Not claimed
 Passing means the rule did not fail on a short window. It does not mean future profit. No real money, ever.
+
+## Outcome: ABANDONED early (2026-10-25)
+The user ended the test before the 90-day judging date. Positions were closed on paper (BTC and ETH, roughly -$240 of
+unrealized loss realized after a pullback). No pass or fail is claimed; the test is simply incomplete.
