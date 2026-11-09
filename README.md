@@ -41,6 +41,7 @@
   <a href="https://vibetrading.wiki/">Website</a> &nbsp;&middot;&nbsp;
   <a href="https://vibetrading.wiki/docs/">Docs</a> &nbsp;&middot;&nbsp;
   <a href="#-news">News</a> &nbsp;&middot;&nbsp;
+  <a href="PAPER_TRADING.md">Paper Trading</a> &nbsp;&middot;&nbsp;
   <a href="#-key-features">Features</a> &nbsp;&middot;&nbsp;
   <a href="#accounts-and-trading">Shadow Account</a> &nbsp;&middot;&nbsp;
   <a href="#-demo">Demo</a> &nbsp;&middot;&nbsp;
